@@ -1,1 +1,9 @@
 March 9, 2023
+
+gzip
+yum install gzip -y
+tar -cvzf /root/backup.tar.gz /usr/local
+
+bzip2
+yum install bzip2 -y
+tar -cvjf /root/backup.tar.bz2 /usr/local
