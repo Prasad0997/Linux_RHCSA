@@ -7,3 +7,333 @@ tar -cvzf /root/backup.tar.gz /usr/local
 bzip2
 yum install bzip2 -y
 tar -cvjf /root/backup.tar.bz2 /usr/local
+ 
+
+
+++++++++++++++++++++ RHCEv8 RHCSA-EX200 exam ++++++++++++++++++++
+update June21
+Important Instructions, read carefully
+Total number of Questions=22
+You have 2VMs, serverA & serverB
+In servera root password already set, just need to re-config network parameters.
+In serverb password must be change with new provided password but network is ready.
+NTP need to be configured in only one system not both.
+YUM Repository need to configured in both systems.
+There is not any question to configure LDAP client.
+it is already configured, just need to configure auto-mounting for LDAP user's home DIR in one system. (follow same steps as RHEL7) Firewall and SELinux both will be pre-enabled.
+serverA
+NOTE: don’t run ssh to servera, it has network issue. first use view vm and fix network issue, then run ssh from physical host to servera
+Q1. Configure network and set the static hostname
+hostname=servera.lab.example.com ip-address=172.25.250.10 subnetmask=255.255.255.0 gateway =172.25.250.254
+dns (or) name server (or) server
+name : 172.25.254.254
+dns-serach=lab.example.com
+NOTE: connection existing, some parameters are wrong. check DNS or GW
+Solution
+# nmtui -→configure in graphical method (or)
+# hostname
+# hostnamectl set-hostname servera.lab.example.com
+# nmcli connection show
+# ifconfig
+# ip route
+# cat /etc/resolv.conf
+# nmcli connection modify "Wired connection 1" ipv4.address "xxxxxx/x" ipv4.dns "xxxxxx" ipv4.method manual
+# nmcli connection reload
+# ip addr
+----------------------------------------------------------------------------------------------------------------------------- -------------------------------------------------- Make sure these two parameters should be enabled in ssh configuration file
+-→ # vim /etc/ssh/sshd_config
+PermitRootLogin Yes
+PasswordAuthentication Yes
+:wq!
+# systemctl restart sshd
+verify
+make ssh connection to serverA through the physical host.
+Q2. Configure YUM repository with the 2given links
+BaseOs: http://content.example.com/rhel8.0/x86_64/dvd/BaseOS AppStream: http://content.example.com/rhel8.0/x86_64/dvd/AppStream
+solution
+# vim /etc/yum.repos.d/rhel.repo
+[BaseOs]
+name=BaseOs baseurl=http://content.example.com/rhel8.0/x86_64/dvd/BaseOS gpgcheck=0
+enabled=1
+[AppStream]
+name=AppStream baseurl=http://content.example.com/rhel8.0/x86_64/dvd/AppStream gpgcheck=0
+     
+enabled=1
+:wq
+verify
+# yum repolist
+
+Q3. Debug SELinux:
+web server running on non-standard port 82 is having issues serving content. Debug and fix the issues.
+web server serves all the existing HTML files from /var/www/html, Don't make any changes to these files. web service should automatically start at boot time.
+solution
+# getenforce
+Enforcing
+# yum list httpd
+# systemctl status httpd.service
+# systemctl enable httpd.service
+# systemctl status httpd.service
+# firewall-cmd --permanent --add-port=82/tcp # firewall-cmd --reload
+# firewall-cmd --list-all
+ports: 82/tcp
+# vim /etc/httpd/conf/httpd.conf
+Listen 82
+:wq
+# semanage port -l | grep "http"
+http_port_t tcp 80, 81, 443, 488, 8008, 8009, 8443, 9000
+# semange port -a -t httpd_port_t -p tcp 82
+# semanage port -l | grep "http"
+http_port_t tcp 82, 80, 81, 443, 488, 8008, 8009, 8443, 9000 # systemctl restart httpd.service
+verify
+open web browser:
+servera.lab.example.com:82
+or
+# curl servera.lab.example.com:82
+Q4. Create User accounts with supplementary group.
+group:
+sysadms
+users:
+natasha
+harry
+sarah (with nologin shell)
+natasha and harry should be the member of sysadms group. password for all users should be trootent
+solution
+# groupadd sysadmin
+# useradd -G sysadmin natasha
+# useradd -G sysadmin harry
+# grep "sysadmin" /etc/group sysadmin:x:1001:natasha,harry
+# useradd -s /sbin/nologin sarah
+# echo "trootent" | passwd --stdin harry
+# echo "trootent" | passwd --stdin natasha # echo "trootent" | passwd --stdin sarah
+Q5. Cron Job
+Configure a cron job that runs every 1minute and executes logger "EX200 in progress" as the user natasha
+or
+Configure a cron job for user natasha, cron must runs daily at 2:23pm and inside executes the /usr/bin/echo "welcome"
+solution
+# crontab -eu natasha
+*/1 * * * * logger "EX200 in progress" 23 14 * * * /usr/bin/echo "welcome" :wq!
+# crontab -lu natasha
+verify
+# tail -f /var/log/messages
+Nov 5 14:42:01 servera natasha[2219]: EX200 in progress
+
+Q6. Create a collaborative directory
+Create the Directory /home/sysadms with the following characteristics:
+Group ownership of /home/sysadms should go to sysadms group.
+The directory should have full permission for all members of sysadms group but not to the other users except root Files created in future under /home/sysadms should get the same group ownership.
+solution
+# mkdir /home/sysadms
+# chgrp sysadms /home/sysadms # ls -ld /home/sysadms
+# chmod 2770 /home/sysadms
+# ls -ld /home/sysadms
+verify
+# touch /home/sysadms/file1.txt # ls -l /home/sysadms/file1.txt
+Q7. Configure NTP
+chrony server is classroom.example.com
+solution
+# systemctl restart chronyd.service
+# timedatectl
+# vim /etc/chrony.conf
+server classroom.example.com iburst :wq!
+# systemctl restart chronyd.service
+verify
+# timedatectl
+# chronyc sources -v
+Q8. Configure Autofs (NFS vers=4.0, so explicitly don't need to mention in auto.map file)
+nfs vers=4.0 exports the /home/guests to your system where X is your station number
+ldapuser's home directory is classroom.example.com:/home/guests/ldapuserX
+ldapuser's home directory should be automounted locally beneath at /home/guests/ldapuserX
+while login with any of the ldapuser then only home directory should accessible from your system that ldapuserX
+solution
+# getent passwd ldapuserX
+# su – ldapuserX
+# yum install autofs -y
+# systemctl enable autofs.service # systemctl start autofs.service
+# vim /etc/auto.master
+/home/guests /etc/auto.misc
+:wq!
+# vim /etc/auto.misc
+ldapuserX -fstype=rw,nfs,vers=4.0 classroom.example.com:/home/guests/ldapuserX :wq!
+# systemctl restart autofs
+verify
+# su - ldapuserX
+$ pwd /home/guests/ldapuserX
+Q9. Create user bob with 2112 uid and set the password trootent solution
+# useradd -u 2112 bob
+# echo "trootent" | passwd --stdin bob
+verify
+# id -u bob
+2112
+# passwd -S bob
+Q10. Find
+Locate all files owned by user harry and copy it under /root/harry-files solution
+# mkdir /root/harry-file
+
+# find / -user harry -exec cp -rvfp {} /root/harry-files \;
+verify
+# ll -a /root/harry-files
+Q11. Grep
+Find a string ich from /usr/lib/mem/ex200/samplefile.txt and put it into /root/lines file solution
+# grep "ich" /usr/lib/mem/ex200/samplefile.txt >/root/lines
+verify
+# cat /root/lines
+Q12. Archive by TAR
+create an archive /root/backup.tar.bz2 of /usr/local dir and compress it with bzip2 or
+create an archive /root/backup.tar.xz of /usr/local dir and compress it with xzip
+or
+create an archive /root/backup.tar.gz of /usr/local dir and compress it with gzip
+solution
+# tar cfvj /root/backup.tar.bz2 /usr/local # tar cfvJ /root/backup.tar.xz /usr/local # tar cfvz /root/backup.tar.gz /usr/local verify
+# ll /root
+Q13. Container
+Create a container logserver from an image rsyslog in serverA from registry.lab.example.com
+Configure the container with systemd services by an existing user walhalla
+Service name should be container-logserver.service and configure it to start automatically across reboot
+Q14.
+solution
+# yum module install container-tools -y # Podman --version
+2.x
+# useradd walhalla
+# echo “trootent” | passwd --stdin walhalla # ll /run/log/
+# vim /etc/systemd/journald.conf
+[Journal]
+storage=persistent
+:wq!
+# systemctl restart systemd-journald
+# ll /run/log
+# ll /var/log/
+# su - walhala
+$ mkdir /home/walhalla/container_logserver/
+$ exit
+# cp -r /var/log/journal/d48318b12e324cc188ffc0516804010a/* /home/walhalla/container_logserver/ # chown walhalla:walhalla /home/walhalla/container_logserver/*
+# ssh walhalla@localhost
+Configure your host journal to store all journal across reboot
+Copy all *.journal from /var/log/journal and all subdirectories to /home/walhalla/container_logserver
+Configure to automount /var/log/journal from logserver container to /home/walhalla/container_logserver when container will start
+
+$ mkdir -p ~/.config/containers/
+$ cp /etc/containers/registries.conf .config/containers/
+$ chmod 664 .config/containers/registries.conf
+NOTE: open ‘registries.conf’ and append ‘registry.lab.example.com’ private registry address
+$ vim .config/containers/registries.conf
+unqualified-search-registries=['registry.redhat.io', 'registry.lab.example.com', 'registry.centos.org', 'docker.io']
+:wq!
+$ podman login regisrty.lab.example.com
+username: walhala
+password: *********
+login success.
+$ podman search rsyslog
+$ podman pull registry.redhat.io/rhel8/rsyslog
+$ podman image list
+$ podman run -d --name logserver -v /home/walhalla/container_logserver/journal:/var/log/journal:Z registry.redhat.io/rhel8/rsyslog $ podman container list
+$ podman ps -a
+$ podman exec -it logserver ls /var/log/
+$ mkdir -p ~/.config/systemd/user
+$ cd .config/systemd/user/
+$ podman generate systemd --name logserver --files --new
+$ systemctl --user daemon-reload
+$ systemctl --user start container-logserver.service
+$ systemctl --user enable --now container-logserver.service
+$ systemctl --user status container-logserver.service
+$ loginctl show-user walhalla
+$ loginctl enable-linger
+$ loginctl show-user walhalla
+ 
+serverB
+Important Instructions, read carefully. In serverb 3disks will be available:
+/dev/vda: for ROOT filesystem (don't do anything under this Disk) /dev/vdb: You need to use for Swap and LVM Partition. /dev/vdc: Will be used for Stratis/VDO.
+Q14. Reset root user password and make it trootent
+solution
+reboot serverB
+press e when kernel lines appear go to linux line and press end key on keyboard and write rd.break console=tty0 press Ctrls+x to continue. # mount -o remount,rw /sysroot/
+# chroot /sysroot/
+# passwd root
+Type new password: trootent Retype new password: trootent # touch /.autorelabel
+# exit
+# exit
+verify
+login to serverB
+u: root
+p: trootent
+# ip addr
+Make sure these two parameters should be enabled in ssh configuration file
+-→ # vim /etc/ssh/sshd_config PermitRootLogin Yes PasswordAuthentication Yes
+:wq!
+# systemctl restart sshd
+NOTE: make ssh connection to serverb through physical host and contiune
+Q15. Configure YUM Repos (BaseOs and AppStream)
+BaseOs: http://content.example.com/rhel8.0/x86_64/dvd/BaseOS AppStream: http://content.example.com/rhel8.0/x86_64/dvd/AppStream
+solution
+# yum repolist
+# vim /etc/yum.repos.d/rhel.repo
+[BaseOs]
+name=BaseOs baseurl=http://content.example.com/rhel8.0/x86_64/dvd/BaseOS/ gpgcheck=0
+enabled=1
+[AppStream]
+name=AppStream baseurl=http://content.example.com/rhel8.0/x86_64/dvd/AppStream/ gpgcheck=0
+enabled=1
+:wq
+verify
+# yum repolist
+Q16. Resize the logical volume mylv. after reboot size should be in between 200MB to 300MB solution
+# lvs
+# df -hT
+# lvextend -L 250M /dev/myvg/mylv # resize2fs /dev/mapper/myvg-mylv verify
+# lvs
+# df -hT
+    
+Q17. Add a swap partition of 512MB and mount it permanently solution
+# free -m
+# fdisk /dev/vdb
+p
+n
+e enter enter enter n enter +512M t
+enter 82
+P
+w
+# udevadm settle
+# mkswap /dev/vdb5
+copy UUID=e5a95dd4-0417-4229-a499-92b29fe9f201
+# vim /etc/fstab
+UUID=e5a95dd4-0417-4229-a499-92b29fe9f201 swap swap defaults 0 0 :wq!
+# mount -a
+# swapon /dev/vdb5
+verify
+# free -m
+# swapon -s
+Q18. Create a logical Volume and mount it permanently
+Create the logical volume with the name wshare by using 50PE's from the volume group wgroup Consider each PE size of volume group as 8MB. mount it on /mnt/wshare with file system vfat
+solution
+# fdisk /dev/vdb p
+n
+enter
++1024M t
+enter 8e
+P
+w
+# udevadm settle
+# pvcreate /dev/vdb6
+# vgcreate -s 8M wgroup /dev/vdb6
+# vgdisplay
+# lvcreate -n wshare -l 50 wgroup
+# lvs
+# mkfs -t vfat /dev/mapper/wgroup-wshare # blkid
+# mkdir /mnt/wshare
+# vim /etc/fstab
+UUID= enter uuid here
+# mount -a # df -hT
+/mnt/wshare vfat
+defaults 0 0
+
+Q19.Configure System Tuning
+Choose the recommended 'tuned' profile for your system and set it as the default.
+solution
+# syatemctl restart tuned.service # tuned-adm list
+# tuned-adm active
+Current active profile: balanced
+# tuned-adm recommend
+virtual-guest
+# tuned-adm profile virtual-guest
+verify
+# tuned-adm active
+Current active profile: virtual-guest
